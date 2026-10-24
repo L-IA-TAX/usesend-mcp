@@ -3,62 +3,11 @@
 from __future__ import annotations
 
 import io
-import json
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from usesend_mcp import cli, client
 from usesend_mcp.client import ApiError, Client, parse_contacts_csv
-
-
-class MockUseSend:
-    """Records requests; replies from a queue of (status, body) or a default 200 {}."""
-
-    def __init__(self):
-        self.requests: list[dict] = []
-        self.replies: list[tuple[int, bytes]] = []
-        outer = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def _handle(self):
-                n = int(self.headers.get("Content-Length") or 0)
-                raw = self.rfile.read(n) if n else b""
-                outer.requests.append(
-                    {
-                        "method": self.command,
-                        "path": self.path,
-                        "headers": dict(self.headers),
-                        "body": json.loads(raw) if raw else None,
-                    }
-                )
-                status, body = outer.replies.pop(0) if outer.replies else (200, b"{}")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = _handle
-
-            def log_message(self, *args):
-                pass
-
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-
-    def close(self):
-        self.httpd.shutdown()
-        self.httpd.server_close()
-
-
-@pytest.fixture
-def mock():
-    m = MockUseSend()
-    yield m
-    m.close()
 
 
 def test_send_email_request_shape(mock):
