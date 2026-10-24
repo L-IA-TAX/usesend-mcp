@@ -55,6 +55,7 @@ class Config:
     audit_schema: str
     allowed_from_domains: tuple[str, ...]
     port: int
+    host: str = "0.0.0.0"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> Config:
@@ -80,6 +81,7 @@ class Config:
             audit_schema=schema,
             allowed_from_domains=domains,
             port=port,
+            host=environ.get("MCP_HOST", "0.0.0.0").strip() or "0.0.0.0",
         )
 
 
@@ -771,7 +773,7 @@ def main() -> None:
     app = create_app(tokens, tools)
     log_json(event="startup", actors=len(tokens.names), port=config.port, audit_schema=config.audit_schema)
     try:
-        uvicorn.run(app, host="0.0.0.0", port=config.port, access_log=False, log_level="warning")
+        uvicorn.run(app, host=config.host, port=config.port, access_log=False, log_level="warning")
     finally:
         audit.close()
 

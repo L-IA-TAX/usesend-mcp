@@ -294,6 +294,8 @@ def test_config_from_env_defaults():
     assert cfg.allowed_from_domains == ("example.com", "mail.example.com")
     assert cfg.audit_schema == "mcp"
     assert cfg.port == 8080
+    assert cfg.host == "0.0.0.0"
+    assert Config.from_env({**ENV, "MCP_HOST": "127.0.0.1"}).host == "127.0.0.1"
 
 
 @pytest.mark.parametrize("drop", list(ENV))

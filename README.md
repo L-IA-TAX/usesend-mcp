@@ -108,6 +108,7 @@ useSend's API and a Postgres database. Next to useSend on the same Docker networ
 | `MCP_AUDIT_SCHEMA` | Audit schema, default `mcp`. |
 | `MCP_ALLOWED_FROM_DOMAINS` | Comma-separated sender domains, e.g. `example.com`. |
 | `MCP_PORT` | Listen port, default `8080`. |
+| `MCP_HOST` | Listen address, default `0.0.0.0` (the dev harness uses `127.0.0.1`). |
 | `MCP_SENTRY_DSN` | Optional Sentry DSN. Unset or `none` = disabled. |
 | `MCP_SENTRY_ENVIRONMENT` | Sentry environment tag. |
 
