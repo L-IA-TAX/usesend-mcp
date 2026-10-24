@@ -60,12 +60,18 @@ if [ "$STATUS" = "200" ]; then pass "root:root 0600 token file: /healthz 200"; e
     docker logs "$APP" 2>&1 | tail -n 20
 fi
 
-UIDS="$(docker top "$APP" -eo uid,cmd | tail -n +2)"
-echo "$UIDS"
-if echo "$UIDS" | grep -q 'usesend_mcp.server' && ! echo "$UIDS" | grep -v '^ *10001 ' | grep -q .; then
-    pass "server runs as uid 10001"
+# `docker top` runs the host's ps, which must include a PID column.
+PROCS="$(docker top "$APP" -eo pid,uid,args | tail -n +2)"
+echo "$PROCS"
+if echo "$PROCS" | grep -q 'usesend_mcp.server' && ! echo "$PROCS" | awk '$2 != "10001"' | grep -q .; then
+    pass "server runs as uid 10001 (docker top)"
 else
-    fail "server is not (only) uid 10001"
+    fail "server is not (only) uid 10001 (docker top)"
+fi
+if docker exec "$APP" grep -Eq '^Uid:[[:space:]]+10001[[:space:]]+10001[[:space:]]+10001[[:space:]]+10001$' /proc/1/status; then
+    pass "PID 1 real/effective/saved uid is 10001"
+else
+    fail "PID 1 uid: $(docker exec "$APP" grep '^Uid:' /proc/1/status)"
 fi
 
 STATUS="$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/" || true)"
