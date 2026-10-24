@@ -1,3 +1,7 @@
+Status: doing
+Branch: spec-001-mcp-server
+Issue:  private tracker
+
 # 001 — useSend MCP server: tools, token auth, audit log, image
 
 Targets the [useSend](https://github.com/usesend/useSend) public API as of **v1.9.8**. Deployment
