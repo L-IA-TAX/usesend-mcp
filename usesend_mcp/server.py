@@ -30,6 +30,7 @@ from usesend_mcp.audit import AuditSink, PostgresAudit, log_json, validate_schem
 from usesend_mcp.auth import TokenTable, load_tokens_or_exit
 from usesend_mcp.client import BULK_CONTACTS_MAX, UNSUB_RE, ApiError, Client, chunks, drop_none, parse_contacts_csv
 from usesend_mcp.redact import redact
+from usesend_mcp.scrub import capture_tool_error, init_sentry
 
 MAX_EMAIL_RECIPIENTS = 50
 MAX_IMPORT_ROWS = 5000
@@ -129,7 +130,7 @@ class UseSendTools:
         client: Client,
         audit: AuditSink,
         allowed_from_domains: tuple[str, ...],
-        on_unexpected_error: Callable[[BaseException], None] | None = None,
+        on_unexpected_error: Callable[[BaseException, str, str], None] | None = None,
     ):
         self.client = client
         self.audit = audit
@@ -174,7 +175,7 @@ class UseSendTools:
         except Exception as e:
             error = type(e).__name__
             if self.on_unexpected_error:
-                self.on_unexpected_error(e)
+                self.on_unexpected_error(e, tool, actor)
             raise
         finally:
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -758,6 +759,7 @@ def main() -> None:
     except ConfigError as e:
         print(f"usesend-mcp: refusing to start: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
+    init_sentry(os.environ, secrets=[*tokens.secret_values(), config.usesend_api_key])
     audit = PostgresAudit(config.database_url, config.audit_schema)
     try:
         audit.open()
@@ -765,7 +767,7 @@ def main() -> None:
         print(f"usesend-mcp: refusing to start: audit database unavailable ({type(e).__name__})", file=sys.stderr)
         sys.exit(1)
     client = Client(config.usesend_base_url, config.usesend_api_key, user_agent="usesend-mcp-server/1")
-    tools = UseSendTools(client, audit, config.allowed_from_domains)
+    tools = UseSendTools(client, audit, config.allowed_from_domains, on_unexpected_error=capture_tool_error)
     app = create_app(tokens, tools)
     log_json(event="startup", actors=len(tokens.names), port=config.port, audit_schema=config.audit_schema)
     try:

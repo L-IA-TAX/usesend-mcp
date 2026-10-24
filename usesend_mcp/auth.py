@@ -30,6 +30,10 @@ class TokenTable:
     def names(self) -> list[str]:
         return [name for name, _ in self._entries]
 
+    def secret_values(self) -> list[str]:
+        """The token values, for scrubbing them out of error reports."""
+        return [token.decode() for _, token in self._entries]
+
     def lookup(self, token: str | None) -> str | None:
         """The actor name for `token`, or None.
 

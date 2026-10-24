@@ -171,7 +171,8 @@ def test_legacy_unsubscribe_placeholder_is_accepted(mcp, mock):
 
 
 @pytest.mark.parametrize(
-    "sender", ["News <news@example.org>", "news@sub.example.com", "not-an-address", "News <news@example.com.example.net>"]
+    "sender",
+    ["News <news@example.org>", "news@sub.example.com", "not-an-address", "News <news@example.com.example.net>"],
 )
 def test_sender_outside_allow_list_is_refused(mcp, mock, audit, sender):
     result = mcp.call("send_email", **{"from": sender}, to=["alice@example.com"], subject="Hi", text="x", confirm=True)
