@@ -25,6 +25,22 @@ class ApiError(Exception):
     pass
 
 
+class InvalidId(ApiError):
+    """A caller-supplied id that can't be used as one URL path segment."""
+
+
+def seg(value) -> str:
+    """One URL path segment from a caller-supplied id.
+
+    Percent-encoded with nothing kept safe, so '/', '?' and '#' can't change which
+    endpoint is called. Encoding leaves '.' and '..' as they are, so those are refused.
+    """
+    s = str(value)
+    if s in ("", ".", ".."):
+        raise InvalidId(f"invalid id: {s!r}")
+    return urllib.parse.quote(s, safe="")
+
+
 class Client:
     def __init__(self, base_url: str, key: str | None, dry_run: bool = False, user_agent: str = "usesend-mcp-cli/1"):
         self.base = base_url.rstrip("/") + "/api"
@@ -33,6 +49,9 @@ class Client:
         self.user_agent = user_agent
 
     def request(self, method, path, body=None, query=None, headers=None):
+        # Backstop for an id interpolated without seg(): it must not reach another endpoint.
+        if "?" in path or "#" in path or any(p in (".", "..") for p in path.split("/")):
+            raise InvalidId(f"refusing path {path!r}: build ids with seg()")
         url = self.base + path
         if query:
             q = {k: v for k, v in query.items() if v is not None}

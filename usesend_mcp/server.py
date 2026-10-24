@@ -28,7 +28,17 @@ from starlette.responses import JSONResponse
 
 from usesend_mcp.audit import AuditSink, PostgresAudit, log_json, validate_schema
 from usesend_mcp.auth import TokenTable, load_tokens_or_exit
-from usesend_mcp.client import BULK_CONTACTS_MAX, UNSUB_RE, ApiError, Client, chunks, drop_none, parse_contacts_csv
+from usesend_mcp.client import (
+    BULK_CONTACTS_MAX,
+    UNSUB_RE,
+    ApiError,
+    Client,
+    InvalidId,
+    chunks,
+    drop_none,
+    parse_contacts_csv,
+    seg,
+)
 from usesend_mcp.redact import redact
 from usesend_mcp.scrub import capture_tool_error, init_sentry
 
@@ -171,6 +181,9 @@ class UseSendTools:
         except Refused as e:
             outcome, error = "refused", str(e)
             raise ToolError(f"Refused: {e}") from None
+        except InvalidId as e:
+            outcome, error = "refused", str(e)
+            raise ToolError(f"Refused: {e}") from None
         except ApiError as e:
             error = str(e)
             raise ToolError(f"useSend API error: {e}") from None
@@ -245,7 +258,7 @@ class UseSendTools:
             payload = drop_none(
                 {"email": email, "firstName": first_name, "lastName": last_name, "properties": properties}
             )
-            return self.client.post(f"/v1/contactBooks/{book_id}/contacts", payload)
+            return self.client.post(f"/v1/contactBooks/{seg(book_id)}/contacts", payload)
 
         return self.call("add_contact", True, args, body)
 
@@ -258,7 +271,7 @@ class UseSendTools:
             if len(rows) > MAX_IMPORT_ROWS:
                 raise Refused(f"{len(rows)} rows; at most {MAX_IMPORT_ROWS} per call")
             results = [
-                self.client.post(f"/v1/contactBooks/{book_id}/contacts/bulk", part)
+                self.client.post(f"/v1/contactBooks/{seg(book_id)}/contacts/bulk", part)
                 for part in chunks(rows, BULK_CONTACTS_MAX)
             ]
             return {"rows": len(rows), "batches": results}
@@ -280,7 +293,7 @@ class UseSendTools:
             payload = drop_none(fields)
             if not payload:
                 raise Refused("nothing to update")
-            return self.client.patch(f"/v1/contactBooks/{book_id}/contacts/{contact_id}", payload)
+            return self.client.patch(f"/v1/contactBooks/{seg(book_id)}/contacts/{seg(contact_id)}", payload)
 
         return self.call("update_contact", True, args, body)
 
@@ -346,7 +359,7 @@ class UseSendTools:
     def cancel_email(self, email_id: str) -> str:
         def body(info: CallInfo):
             info.email_ids = [email_id]
-            return self.client.post(f"/v1/emails/{email_id}/cancel")
+            return self.client.post(f"/v1/emails/{seg(email_id)}/cancel")
 
         return self.call("cancel_email", True, {"id": email_id}, body)
 
@@ -386,13 +399,13 @@ class UseSendTools:
         return self.call("create_campaign", True, args, body)
 
     def _campaign_preview(self, campaign_id: str) -> dict[str, Any]:
-        campaign = self.client.get(f"/v1/campaigns/{campaign_id}") or {}
+        campaign = self.client.get(f"/v1/campaigns/{seg(campaign_id)}") or {}
         preview: dict[str, Any] = {
             "campaign": {k: campaign.get(k) for k in ("id", "name", "from", "subject", "status") if k in campaign}
         }
         book_id = campaign.get("contactBookId")
         if book_id:
-            book = self.client.get(f"/v1/contactBooks/{book_id}") or {}
+            book = self.client.get(f"/v1/contactBooks/{seg(book_id)}") or {}
             preview["contact_book"] = {
                 "id": book_id,
                 "name": book.get("name"),
@@ -419,14 +432,14 @@ class UseSendTools:
                     "The contact count includes unsubscribed contacts, so it is an upper bound.",
                 }
             payload = drop_none({"scheduledAt": at, "batchSize": batch_size})
-            return self.client.post(f"/v1/campaigns/{campaign_id}/schedule", payload)
+            return self.client.post(f"/v1/campaigns/{seg(campaign_id)}/schedule", payload)
 
         return self.call("schedule_campaign", True, args, body)
 
     def pause_campaign(self, campaign_id: str) -> str:
         def body(info: CallInfo):
             info.campaign_id = campaign_id
-            return self.client.post(f"/v1/campaigns/{campaign_id}/pause")
+            return self.client.post(f"/v1/campaigns/{seg(campaign_id)}/pause")
 
         return self.call("pause_campaign", True, {"id": campaign_id}, body)
 
@@ -442,7 +455,7 @@ class UseSendTools:
                     **preview,
                     "note": "Nothing was resumed. Call again with confirm=true to resume sending.",
                 }
-            return self.client.post(f"/v1/campaigns/{campaign_id}/resume")
+            return self.client.post(f"/v1/campaigns/{seg(campaign_id)}/resume")
 
         return self.call("resume_campaign", True, {"id": campaign_id, "confirm": confirm}, body)
 
@@ -500,7 +513,7 @@ def build_mcp(tools: UseSendTools) -> MCPServer:
     @mcp.tool(annotations=READ_ONLY)
     def get_contact_book(id: str) -> Any:
         """Get one contact book, including its contact count."""
-        return tools.read("get_contact_book", {"id": id}, lambda: c.get(f"/v1/contactBooks/{id}"))
+        return tools.read("get_contact_book", {"id": id}, lambda: c.get(f"/v1/contactBooks/{seg(id)}"))
 
     @mcp.tool(annotations=READ_ONLY)
     def list_contacts(
@@ -512,7 +525,7 @@ def build_mcp(tools: UseSendTools) -> MCPServer:
             "list_contacts",
             args,
             lambda: c.get(
-                f"/v1/contactBooks/{book_id}/contacts",
+                f"/v1/contactBooks/{seg(book_id)}/contacts",
                 emails=",".join(emails) if emails else None,
                 page=page,
                 limit=limit,
@@ -530,7 +543,7 @@ def build_mcp(tools: UseSendTools) -> MCPServer:
     @mcp.tool(annotations=READ_ONLY)
     def get_campaign(id: str) -> Any:
         """Get one campaign with its stats (sent, delivered, opened, clicked, bounced…)."""
-        return tools.read("get_campaign", {"id": id}, lambda: c.get(f"/v1/campaigns/{id}"))
+        return tools.read("get_campaign", {"id": id}, lambda: c.get(f"/v1/campaigns/{seg(id)}"))
 
     @mcp.tool(annotations=READ_ONLY)
     def list_emails(
@@ -547,7 +560,7 @@ def build_mcp(tools: UseSendTools) -> MCPServer:
     @mcp.tool(annotations=READ_ONLY)
     def get_email(id: str) -> Any:
         """Get one email and its delivery status."""
-        return tools.read("get_email", {"id": id}, lambda: c.get(f"/v1/emails/{id}"))
+        return tools.read("get_email", {"id": id}, lambda: c.get(f"/v1/emails/{seg(id)}"))
 
     @mcp.tool(annotations=READ_ONLY)
     def get_analytics(days: Literal[7, 30] = 7) -> Any:

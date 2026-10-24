@@ -44,6 +44,7 @@ from usesend_mcp.client import (
     chunks,
     drop_none,
     parse_contacts_csv,
+    seg,
 )
 
 DEFAULT_KEY_FILE = Path.home() / ".config" / "usesend" / "key"
@@ -171,15 +172,15 @@ def emails_list(c, a):
 
 
 def emails_get(c, a):
-    out(c.get(f"/v1/emails/{a.id}"))
+    out(c.get(f"/v1/emails/{seg(a.id)}"))
 
 
 def emails_reschedule(c, a):
-    out(c.patch(f"/v1/emails/{a.id}", {"scheduledAt": a.at}))
+    out(c.patch(f"/v1/emails/{seg(a.id)}", {"scheduledAt": a.at}))
 
 
 def emails_cancel(c, a):
-    out(c.post(f"/v1/emails/{a.id}/cancel"))
+    out(c.post(f"/v1/emails/{seg(a.id)}/cancel"))
 
 
 # ─── contact books ───────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ def books_list(c, a):
 
 
 def books_get(c, a):
-    out(c.get(f"/v1/contactBooks/{a.id}"))
+    out(c.get(f"/v1/contactBooks/{seg(a.id)}"))
 
 
 def books_create(c, a):
@@ -201,12 +202,12 @@ def books_update(c, a):
     body = drop_none({"name": a.name, "emoji": a.emoji})
     if not body:
         sys.exit("nothing to update (--name/--emoji)")
-    out(c.patch(f"/v1/contactBooks/{a.id}", body))
+    out(c.patch(f"/v1/contactBooks/{seg(a.id)}", body))
 
 
 def books_delete(c, a):
     confirm(a, f"DELETE contact book {a.id} and all its contacts")
-    out(c.delete(f"/v1/contactBooks/{a.id}"))
+    out(c.delete(f"/v1/contactBooks/{seg(a.id)}"))
 
 
 # ─── contacts ────────────────────────────────────────────────────────────────
@@ -215,7 +216,7 @@ def books_delete(c, a):
 def contacts_list(c, a):
     out(
         c.get(
-            f"/v1/contactBooks/{a.book}/contacts",
+            f"/v1/contactBooks/{seg(a.book)}/contacts",
             emails=",".join(a.email) if a.email else None,
             page=a.page,
             limit=a.limit,
@@ -224,7 +225,7 @@ def contacts_list(c, a):
 
 
 def contacts_get(c, a):
-    out(c.get(f"/v1/contactBooks/{a.book}/contacts/{a.id}"))
+    out(c.get(f"/v1/contactBooks/{seg(a.book)}/contacts/{seg(a.id)}"))
 
 
 def _contact_body(a):
@@ -240,23 +241,23 @@ def _contact_body(a):
 
 
 def contacts_add(c, a):
-    out(c.post(f"/v1/contactBooks/{a.book}/contacts", _contact_body(a)))
+    out(c.post(f"/v1/contactBooks/{seg(a.book)}/contacts", _contact_body(a)))
 
 
 def contacts_update(c, a):
     body = _contact_body(a)
     if not body:
         sys.exit("nothing to update")
-    out(c.patch(f"/v1/contactBooks/{a.book}/contacts/{a.id}", body))
+    out(c.patch(f"/v1/contactBooks/{seg(a.book)}/contacts/{seg(a.id)}", body))
 
 
 def contacts_unsubscribe(c, a):
-    out(c.patch(f"/v1/contactBooks/{a.book}/contacts/{a.id}", {"subscribed": False}))
+    out(c.patch(f"/v1/contactBooks/{seg(a.book)}/contacts/{seg(a.id)}", {"subscribed": False}))
 
 
 def contacts_delete(c, a):
     confirm(a, f"delete contact {a.id}")
-    out(c.delete(f"/v1/contactBooks/{a.book}/contacts/{a.id}"))
+    out(c.delete(f"/v1/contactBooks/{seg(a.book)}/contacts/{seg(a.id)}"))
 
 
 def contacts_import(c, a):
@@ -269,7 +270,7 @@ def contacts_import(c, a):
     print(f"{len(rows)} contact(s) → book {a.book}", file=sys.stderr)
     results = []
     for part in chunks(rows, BULK_CONTACTS_MAX):
-        results.append(c.post(f"/v1/contactBooks/{a.book}/contacts/bulk", part))
+        results.append(c.post(f"/v1/contactBooks/{seg(a.book)}/contacts/bulk", part))
     out(results if not a.dry_run else None)
 
 
@@ -281,7 +282,7 @@ def campaigns_list(c, a):
 
 
 def campaigns_get(c, a):
-    out(c.get(f"/v1/campaigns/{a.id}"))
+    out(c.get(f"/v1/campaigns/{seg(a.id)}"))
 
 
 def campaigns_create(c, a):
@@ -319,21 +320,21 @@ def campaigns_create(c, a):
 def campaigns_schedule(c, a):
     when = "now" if not a.at else a.at
     confirm(a, f"schedule campaign {a.id} to send {when}")
-    out(c.post(f"/v1/campaigns/{a.id}/schedule", drop_none({"scheduledAt": a.at, "batchSize": a.batch_size})))
+    out(c.post(f"/v1/campaigns/{seg(a.id)}/schedule", drop_none({"scheduledAt": a.at, "batchSize": a.batch_size})))
 
 
 def campaigns_pause(c, a):
-    out(c.post(f"/v1/campaigns/{a.id}/pause"))
+    out(c.post(f"/v1/campaigns/{seg(a.id)}/pause"))
 
 
 def campaigns_resume(c, a):
     confirm(a, f"resume sending campaign {a.id}")
-    out(c.post(f"/v1/campaigns/{a.id}/resume"))
+    out(c.post(f"/v1/campaigns/{seg(a.id)}/resume"))
 
 
 def campaigns_delete(c, a):
     confirm(a, f"delete campaign {a.id}")
-    out(c.delete(f"/v1/campaigns/{a.id}"))
+    out(c.delete(f"/v1/campaigns/{seg(a.id)}"))
 
 
 # ─── domains / analytics ─────────────────────────────────────────────────────
@@ -344,11 +345,11 @@ def domains_list(c, a):
 
 
 def domains_get(c, a):
-    out(c.get(f"/v1/domains/{a.id}"))
+    out(c.get(f"/v1/domains/{seg(a.id)}"))
 
 
 def domains_verify(c, a):
-    out(c.put(f"/v1/domains/{a.id}/verify"))
+    out(c.put(f"/v1/domains/{seg(a.id)}/verify"))
 
 
 def analytics_series(c, a):
