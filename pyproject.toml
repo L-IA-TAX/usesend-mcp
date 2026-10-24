@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "usesend-mcp"
+version = "0.1.0"
+description = "MCP server and CLI for a self-hosted useSend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned to one minor: a default change (e.g. host checks, the HTTP path) must not slip in.
+    "mcp>=2.3,<2.4",
+    "psycopg[binary,pool]>=3.2",
+    "uvicorn>=0.30",
+    "sentry-sdk>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pgserver>=0.1"]
+
+[project.scripts]
+usesend-mcp = "usesend_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["usesend_mcp"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

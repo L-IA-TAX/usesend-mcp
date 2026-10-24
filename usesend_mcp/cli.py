@@ -30,94 +30,23 @@ from __future__ import annotations
 
 import argparse
 import base64
-import csv
 import json
 import os
-import re
 import sys
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
+from usesend_mcp.client import (
+    BATCH_EMAILS_MAX,
+    BULK_CONTACTS_MAX,
+    UNSUB_RE,
+    ApiError,
+    Client,
+    chunks,
+    drop_none,
+    parse_contacts_csv,
+)
+
 DEFAULT_KEY_FILE = Path.home() / ".config" / "usesend" / "key"
-BULK_CONTACTS_MAX = 1000  # API limit per bulk add/delete call
-BATCH_EMAILS_MAX = 100  # API limit per /emails/batch call
-# Campaigns are refused at send/schedule time without one of these (campaign-service.ts).
-UNSUB_RE = re.compile(r"\{\{\s*(unsend|usesend)_unsubscribe_url\s*\}\}", re.I)
-
-
-class ApiError(Exception):
-    pass
-
-
-# ─── HTTP ────────────────────────────────────────────────────────────────────
-
-
-class Client:
-    def __init__(self, base_url: str, key: str | None, dry_run: bool = False):
-        self.base = base_url.rstrip("/") + "/api"
-        self.key = key
-        self.dry_run = dry_run
-
-    def request(self, method, path, body=None, query=None, headers=None):
-        url = self.base + path
-        if query:
-            q = {k: v for k, v in query.items() if v is not None}
-            if q:
-                url += "?" + urllib.parse.urlencode(q, doseq=True)
-        if self.dry_run:
-            print(f"[dry-run] {method} {url}", file=sys.stderr)
-            if body is not None:
-                print(json.dumps(body, indent=2, ensure_ascii=False), file=sys.stderr)
-            return None
-        data = json.dumps(body).encode() if body is not None else None
-        hdrs = {
-            "Authorization": f"Bearer {self.key}",
-            "Accept": "application/json",
-            "User-Agent": "usesend-mcp-cli/1",
-        }
-        if data is not None:
-            hdrs["Content-Type"] = "application/json"
-        hdrs.update(headers or {})
-        # useSend Cloud rate-limits per team (2 req/s by default): back off on 429.
-        for attempt in range(6):
-            req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
-            try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    raw = resp.read()
-                    return json.loads(raw) if raw else {}
-            except urllib.error.HTTPError as e:
-                raw = e.read().decode(errors="replace")
-                if e.code == 429 and attempt < 5:
-                    time.sleep(min(2**attempt, 10))
-                    continue
-                try:
-                    detail = json.loads(raw)
-                    detail = detail.get("error", detail)
-                except json.JSONDecodeError:
-                    # Usually an HTML login/error page from a proxy in front of the API.
-                    detail = raw[:300]
-                raise ApiError(f"{method} {path} → HTTP {e.code}: {detail}") from None
-            except urllib.error.URLError as e:
-                raise ApiError(f"{method} {path} → {e.reason}") from None
-        raise ApiError(f"{method} {path} → still rate-limited after retries")
-
-    def get(self, path, **query):
-        return self.request("GET", path, query=query)
-
-    def post(self, path, body=None, headers=None):
-        return self.request("POST", path, body=body if body is not None else {}, headers=headers)
-
-    def patch(self, path, body):
-        return self.request("PATCH", path, body=body)
-
-    def put(self, path, body=None):
-        return self.request("PUT", path, body=body)
-
-    def delete(self, path, body=None):
-        return self.request("DELETE", path, body=body)
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -181,15 +110,6 @@ def attachments(paths):
         {"filename": Path(p).name, "content": base64.b64encode(Path(p).read_bytes()).decode()}
         for p in paths
     ]
-
-
-def chunks(seq, n):
-    for i in range(0, len(seq), n):
-        yield seq[i : i + n]
-
-
-def drop_none(d: dict) -> dict:
-    return {k: v for k, v in d.items() if v is not None}
 
 
 # ─── emails ──────────────────────────────────────────────────────────────────
@@ -342,28 +262,8 @@ def contacts_delete(c, a):
 def contacts_import(c, a):
     """CSV with an `email` column; firstName/lastName (or first_name/last_name)
     map to fields, `subscribed` to a bool, every other column to a property."""
-    rows = []
     with open(a.csv, newline="", encoding="utf-8-sig") as fh:
-        for r in csv.DictReader(fh):
-            r = {(k or "").strip(): (v or "").strip() for k, v in r.items()}
-            email = r.pop("email", "")
-            if not email:
-                continue
-            item = {"email": email}
-            first = r.pop("firstName", "") or r.pop("first_name", "")
-            last = r.pop("lastName", "") or r.pop("last_name", "")
-            r.pop("first_name", None), r.pop("last_name", None)
-            if first:
-                item["firstName"] = first
-            if last:
-                item["lastName"] = last
-            sub = r.pop("subscribed", "")
-            if sub:
-                item["subscribed"] = sub.lower() in ("1", "true", "yes", "sim")
-            props = {k: v for k, v in r.items() if k and v}
-            if props:
-                item["properties"] = props
-            rows.append(item)
+        rows = parse_contacts_csv(fh)
     if not rows:
         sys.exit("no rows with an email found")
     print(f"{len(rows)} contact(s) → book {a.book}", file=sys.stderr)
@@ -471,7 +371,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--key", help="API key (else $USESEND_API_KEY, --key-file, ~/.config/usesend/key)")
     p.add_argument("--key-file", help="file holding the API key")
-    p.add_argument("--url", default=os.environ.get("USESEND_BASE_URL"), help="base URL without /api (else $USESEND_BASE_URL)")
+    p.add_argument(
+        "--url", default=os.environ.get("USESEND_BASE_URL"), help="base URL without /api (else $USESEND_BASE_URL)"
+    )
     p.add_argument("-y", "--yes", action="store_true", help="skip confirmation prompts")
     p.add_argument("-n", "--dry-run", action="store_true", help="print requests, send nothing")
     top = p.add_subparsers(dest="group", required=True)
