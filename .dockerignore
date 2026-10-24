@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+.dev
+.worktrees
+.claude
+**/__pycache__
+*.egg-info
+dev
+specs
+tests
