@@ -379,7 +379,14 @@ Built as specified. The differences:
   through a fake sink.
 - **Upstream checks** at v1.9.8: custom email `headers`, `Idempotency-Key` on `POST /v1/emails`, the
   campaign `id`/`contactBookId`, and `_count.contacts` on `GET /v1/contactBooks/{id}`.
+- **Ids are one path segment (fixed after review).** Tool and CLI ids were interpolated into URL
+  paths unescaped, so `pause_campaign(id="c2/schedule#")` reached `POST /campaigns/c2/schedule`,
+  bypassing confirm. `client.seg()` now percent-encodes every id and refuses `""`, `.` and `..`
+  (audited as `refused`), and `Client.request` refuses any path still carrying `?`, `#` or a dot
+  segment. Covered by `tests/test_path_ids.py`.
 - **Deferred:**
+  - safe retries (content-derived idempotency key, an `unknown` outcome, partial-import
+    reporting): spec [002](002-todo-idempotent-retries.md);
   - report audit-DB write failures to Sentry (they are logged to stdout only);
   - set `serverInfo.version` from package metadata (currently empty).
 - **Manual, once:** set the GHCR package visibility to public after the first `v*` tag.
