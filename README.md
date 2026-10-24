@@ -5,8 +5,8 @@ An [MCP](https://modelcontextprotocol.io) server and CLI for a self-hosted
 schedule and track marketing campaigns by asking an AI assistant. Every action is recorded against
 the person who asked for it.
 
-> **Status: specified, not built yet.** The design is in [`specs/`](specs/CATALOG.md). Everything
-> below describes the target behaviour from [001](specs/001-todo-mcp-server.md).
+> **Status: v1 built, not yet released.** The design is spec 001 in [`specs/`](specs/CATALOG.md).
+> Images are published once a `vX.Y.Z` tag is pushed.
 
 ## Why a server, and not useSend API keys
 
@@ -177,4 +177,4 @@ Design decisions live in [`specs/`](specs/CATALOG.md):
 
 | # | Spec |
 |---|---|
-| [001](specs/001-todo-mcp-server.md) | MCP server: tools, token auth, audit log, image |
+| [001](specs/CATALOG.md) | MCP server: tools, token auth, audit log, image |
