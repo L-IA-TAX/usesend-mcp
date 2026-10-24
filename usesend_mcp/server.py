@@ -694,8 +694,13 @@ class AuthMiddleware:
         self.tokens = tokens
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] == "lifespan":
             return await self.app(scope, receive, send)
+        if scope["type"] != "http":
+            # Nothing but HTTP is served: refuse websockets (or anything else) outright.
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+            return None
         path = scope.get("path", "")
         status = {"code": None}
 

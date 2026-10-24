@@ -66,3 +66,12 @@ def test_request_log_never_contains_the_token(http, capsys):
     assert '"actor": "alice"' in logged
     assert ALICE_TOKEN not in logged
     assert "x" * 64 not in logged
+
+
+def test_websocket_is_refused_even_with_a_token(http):
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with http.websocket_connect("/", headers={"Authorization": f"Bearer {ALICE_TOKEN}"}) as ws:
+            ws.receive_text()
+    assert exc.value.code == 1008
