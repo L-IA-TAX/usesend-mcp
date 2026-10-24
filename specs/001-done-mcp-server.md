@@ -1,4 +1,4 @@
-Status: doing
+Status: done
 Branch: spec-001-mcp-server
 Issue:  private tracker
 
@@ -344,3 +344,47 @@ them.
 - **No delete tools, no batch-send tool, no templates** in v1.
 - **useSend upgrades.** Tool shapes are checked against v1.9.8. Re-check the public API routes used
   here before moving to a newer useSend.
+
+## Implementation Notes
+
+Built as specified. The differences:
+
+- **`mcp` 2.3, not FastMCP 1.x.** The current SDK at build time was 2.3.0. There, FastMCP is
+  `mcp.server.mcpserver.MCPServer`, and the HTTP settings (`streamable_http_path="/"`,
+  `stateless_http`, `json_response`, `host="0.0.0.0"`, `transport_security=None`) are passed to
+  `streamable_http_app(...)` instead of the constructor. Same settings, different call site. Pinned
+  `mcp>=2.3,<2.4`.
+- **The `from` parameter.** `from` is a Python keyword, so `send_email` and `create_campaign` declare
+  `sender: Annotated[str, Field(alias="from")]`. A small `from_alias` wrapper maps the aliased
+  keyword the SDK passes back. The wire schema says `from`.
+- **Tool results** are one JSON text block (the SDK would otherwise split a list into one block per
+  item).
+- **The scrubber is stricter than written.** Exception messages, breadcrumb messages and
+  interpolated log arguments are dropped rather than pattern-scrubbed, since any of them can echo a
+  body or a recipient. The exception type, frames (function, line), tool, actor and trace ids are
+  kept. Sentry's logging integration only adds breadcrumbs; unexpected tool errors are captured
+  explicitly, tagged with `tool` and `actor`.
+- **The auth middleware** strips `Authorization` before the MCP app runs, lets only `lifespan` bypass
+  it, and closes websockets (1008).
+- **Startup** also refuses (exit 1, one line) on a missing required variable, an invalid
+  `MCP_AUDIT_SCHEMA`, or an unreachable audit database. The audit DDL runs before serving.
+- **Added:** `MCP_HOST` (default `0.0.0.0`; the dev harness uses `127.0.0.1`) and a `.dockerignore`.
+  `client.py` also holds the CSV row rules (`parse_contacts_csv`), shared by the CLI and
+  `import_contacts`.
+- **CI:** the GHCR image name lowercases the owner (`${GITHUB_REPOSITORY_OWNER,,}`), because GHCR
+  rejects uppercase. The entrypoint test (`tests/entrypoint_test.sh`) runs in the `image-test` job
+  against the built image and Postgres 16, checks the uid with both `docker top` and `/proc/1/status`,
+  and also covers the non-root pass-through and that the token is absent from `docker inspect`.
+- **Tests:** the audit is also exercised against a real Postgres via `pgserver` (no Docker), as well as
+  through a fake sink.
+- **Upstream checks** at v1.9.8: custom email `headers`, `Idempotency-Key` on `POST /v1/emails`, the
+  campaign `id`/`contactBookId`, and `_count.contacts` on `GET /v1/contactBooks/{id}`.
+- **Deferred:**
+  - report audit-DB write failures to Sentry (they are logged to stdout only);
+  - set `serverInfo.version` from package metadata (currently empty).
+- **Manual, once:** set the GHCR package visibility to public after the first `v*` tag.
+
+**Change division.** There is no `CONTRIBUTING.md`, so this used the CLAUDE.md conventions. One concern
+per commit, in a single PR stacked on the deploy-requirements PR. One divergence: the server commit
+left one ruff line-length error in a test file, fixed in the next commit (tests passed at every
+commit). It was already pushed, so it is reported here rather than rewritten.
