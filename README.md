@@ -100,15 +100,27 @@ useSend's API and a Postgres database. Next to useSend on the same Docker networ
 
 | Variable | Purpose |
 |---|---|
-| `MCP_TOKENS` | `name:token[,name:token…]`. The name is what the audit log records. |
+| `MCP_TOKENS_FILE` | Path to a file holding `name:token[,name:token…]`. The name is what the audit log records. |
+| `MCP_TOKENS` | The same list, inline. Set exactly one of the two. |
 | `MCP_USESEND_API_KEY` | The server's own useSend key. |
 | `USESEND_BASE_URL` | useSend base URL without `/api`, e.g. `http://usesend:3000`. |
 | `MCP_DATABASE_URL` | Postgres URL for the audit role. |
 | `MCP_AUDIT_SCHEMA` | Audit schema, default `mcp`. |
 | `MCP_ALLOWED_FROM_DOMAINS` | Comma-separated sender domains, e.g. `example.com`. |
 | `MCP_PORT` | Listen port, default `8080`. |
+| `MCP_SENTRY_DSN` | Optional Sentry DSN. Unset or `none` = disabled. |
+| `MCP_SENTRY_ENVIRONMENT` | Sentry environment tag. |
 
 Pass secrets through your deployment's secret store. Never commit them.
+
+The token list is read once at startup; to add, revoke or rotate a token, change it and restart.
+The server refuses to start if the list is missing, malformed, has duplicates, still contains
+`CHANGE-ME`, or if both `MCP_TOKENS` and `MCP_TOKENS_FILE` are set. The token file may be
+root-owned with mode `0600`: the container's entrypoint reads it as root, then runs the server as
+uid 10001.
+
+Sentry, when enabled, never receives tool arguments (bodies, recipients, CSV content), tokens,
+API keys or request headers.
 
 ### Audit log
 
@@ -138,6 +150,15 @@ ORDER BY a.at DESC;
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
 pytest                                  # no network: useSend is mocked
+python dev/run.py                       # local Postgres + fake useSend + server on :8080
+```
+
+`dev/run.py` needs no Docker and no real useSend. It starts Postgres (via `pgserver`) and a fake
+useSend, writes a dev token to `.dev/tokens`, and runs the server at `http://127.0.0.1:8080/`.
+
+To run against a real useSend instead:
+
+```bash
 MCP_TOKENS=alice:$(openssl rand -hex 32) MCP_USESEND_API_KEY=us_… \
 USESEND_BASE_URL=https://usesend.example.com MCP_DATABASE_URL=postgresql://… \
 MCP_ALLOWED_FROM_DOMAINS=example.com python -m usesend_mcp.server
