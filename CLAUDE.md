@@ -1,5 +1,29 @@
 # usesend-mcp
 
+## Spec workflow
+Tracker:       linear
+Linear team:   L                 # issue ids look like L-321
+Linear CLI:    linearis          # the account comes from direnv (assert LINEAR_API_TOKEN is set)
+Title prefix:  Infra:            # issue titles: `Infra: <title>`
+Branch prefix: spec-NNN-slug     # always — NOT Linear's branchName (it embeds a person's name)
+Specs dir:     specs/
+
+**Linear IDs stay out of this public repo.** Track work in Linear, but:
+- commit subjects are `spec-NNN <description>`, never `L-NNN …`;
+- the spec header says `Issue: private tracker`, and the CATALOG `Issue` column says `private`;
+- PR titles and bodies carry no Linear ID or link. Put the PR link in the Linear issue instead.
+
+This overrides the global convention of using the Linear identifier in branches and subjects.
+
+## Build & test
+Setup: the same venv as the Dev server (`uv venv --python 3.12 .venv && uv pip install -p .venv -e '.[dev]'`)
+Lint:  .venv/bin/ruff check .
+Test:  .venv/bin/pytest          # no network; one module: .venv/bin/pytest tests/test_<module>.py
+Image: docker build .            # not available on the dev machine; CI builds and tests the image
+
+## API Modules
+none — this is a deployed service; nothing here is consumed as a library.
+
 ## Dev server
 
 Local harness from spec 001 (`dev/run.py`): Postgres via `pgserver`, a stdlib fake useSend on
