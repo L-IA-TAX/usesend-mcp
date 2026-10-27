@@ -1,5 +1,50 @@
 # usesend-mcp
 
+## Spec workflow
+Tracker:       linear
+Linear team:   L                 # issue ids look like L-321
+Linear CLI:    linearis          # the account comes from direnv (assert LINEAR_API_TOKEN is set)
+Title prefix:  Infra:            # issue titles: `Infra: <title>`
+Branch prefix: spec-NNN-slug     # always — NOT Linear's branchName (it embeds a person's name)
+Specs dir:     specs/
+
+**Linear IDs stay out of this public repo.** Track work in Linear, but:
+- commit subjects are `spec-NNN <description>`, never `L-NNN …`;
+- the spec header says `Issue: private tracker`, and the CATALOG `Issue` column says `private`;
+- PR titles and bodies carry no Linear ID or link. Put the PR link in the Linear issue instead.
+
+This overrides the global convention of using the Linear identifier in branches and subjects.
+
+## Build & test
+Setup: the same venv as the Dev server (`uv venv --python 3.12 .venv && uv pip install -p .venv -e '.[dev]'`)
+Lint:  .venv/bin/ruff check .
+Test:  .venv/bin/pytest          # no network; one module: .venv/bin/pytest tests/test_<module>.py
+Image: docker build .            # not available on the dev machine; CI builds and tests the image
+
+## API Modules
+none — this is a deployed service; nothing here is consumed as a library.
+
+## Dev server
+
+Local harness from spec 001 (`dev/run.py`): Postgres via `pgserver`, a stdlib fake useSend on
+`127.0.0.1:3999`, a dev token in `.dev/tokens`. No Docker or real useSend needed (neither is
+available on the dev machine). Python 3.12, matching the image (`pgserver` wheels don't cover the
+system Python).
+
+```
+Setup: uv venv --python 3.12 .venv && uv pip install -p .venv -e '.[dev]'
+Start: .venv/bin/python dev/run.py
+Port:  8080 (fake useSend 3999)
+Ready: curl -sf http://127.0.0.1:8080/healthz   → {"ok": true}
+Auth:  Authorization: Bearer $(cut -d: -f2 .dev/tokens)
+Stop:  Ctrl-C / SIGTERM to dev/run.py (it stops Postgres and the fake)
+```
+
+Live evidence is API-level (curl), since there is no UI: `POST /` without a token → 401; an MCP
+`initialize` + `tools/list` with the token; a `confirm=false` tool call → a preview and a
+`preview` audit row (`psql` against the pgserver URL the harness prints); the fake's request log
+in `.dev/usesend.log` shows no call was made.
+
 ## This repository is PUBLIC
 
 Everything committed here (code, specs, README, commit messages, PR titles and bodies, issue

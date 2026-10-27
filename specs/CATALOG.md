@@ -5,4 +5,5 @@ filename disagree, the filename wins; reconcile this table to match. Numbers are
 
 | #   | Status | Title / slug              | Branch | Issue | Notes |
 |-----|--------|---------------------------|--------|-------|-------|
-| 001 | todo   | mcp-server                | —      | —     | tools, static-token auth, audit table, GHCR image; imports the existing stdlib CLI + skill |
+| 001 | done   | mcp-server                | spec-001-mcp-server | private | tools, static-token auth, audit table, GHCR image; imports the existing stdlib CLI + skill |
+| 002 | todo   | idempotent-retries        | —      | —     | content-derived Idempotency-Key, `unknown` audit outcome, partial-import reporting; from the 001 review |
