@@ -44,6 +44,7 @@ ROUTES: list[tuple[str, str, object]] = [
     ("POST", r"/api/v1/contactBooks/[^/]+/contacts", {"contactId": "contact_new"}),
     ("POST", r"/api/v1/contactBooks/[^/]+/contacts/bulk", {"message": "ok", "count": None}),
     ("PATCH", r"/api/v1/contactBooks/[^/]+/contacts/[^/]+", {"contactId": "contact_1"}),
+    ("PATCH", r"/api/v1/contactBooks/[^/]+", BOOK),
     ("GET", r"/api/v1/campaigns", {"campaigns": [CAMPAIGN], "totalPage": 1}),
     ("POST", r"/api/v1/campaigns", {**CAMPAIGN, "id": "campaign_new"}),
     ("GET", r"/api/v1/campaigns/[^/]+", CAMPAIGN),

@@ -29,6 +29,9 @@ All calls go through the stdlib-only CLI: `python3 -m usesend_mcp.cli` from the 
 4. `from` must be on a domain verified in useSend (`domains list`). Never create or delete domains;
    `domains` is read/verify only.
 5. Deletes (`books delete`, `contacts delete`, `campaigns delete`) need explicit user approval.
+6. `books create` turns double opt-in off (useSend's own default is on). Pass `--double-opt-in` only
+   when the user asks for confirmation emails; `books update <id> --double-opt-in|--no-double-opt-in`
+   toggles it on an existing book.
 
 ## Typical flow
 ```bash

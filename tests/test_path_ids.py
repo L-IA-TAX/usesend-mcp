@@ -23,6 +23,7 @@ HOSTILE = ["c2/schedule#", "c2/resume?x=1", "../campaigns/c2/schedule#", "a b%2F
 CASES = [
     ("get_contact_book", {"id": "X"}, "GET", "/api/v1/contactBooks/{}"),
     ("list_contacts", {"book_id": "X"}, "GET", "/api/v1/contactBooks/{}/contacts"),
+    ("update_contact_book", {"id": "X", "double_opt_in": False}, "PATCH", "/api/v1/contactBooks/{}"),
     ("get_campaign", {"id": "X"}, "GET", "/api/v1/campaigns/{}"),
     ("get_email", {"id": "X"}, "GET", "/api/v1/emails/{}"),
     ("add_contact", {"book_id": "X", "email": "alice@example.com"}, "POST", "/api/v1/contactBooks/{}/contacts"),

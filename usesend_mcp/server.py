@@ -236,13 +236,82 @@ class UseSendTools:
 
     # ─── mutating ──────────────────────────────────────────────────────────────
 
-    def create_contact_book(self, name: str, emoji: str | None) -> str:
+    def _opt_in_fields(
+        self, enabled: bool | None, sender: str | None, subject: str | None, content: str | None
+    ) -> dict[str, Any]:
+        """Double opt-in fields for a contact-book body; a custom sender must be on an allowed domain."""
+        if sender is not None:
+            self.check_sender(sender)
+        return drop_none(
+            {
+                "doubleOptInEnabled": enabled,
+                "doubleOptInFrom": sender,
+                "doubleOptInSubject": subject,
+                "doubleOptInContent": content,
+            }
+        )
+
+    def create_contact_book(
+        self,
+        name: str,
+        emoji: str | None,
+        double_opt_in: bool = False,
+        opt_in_from: str | None = None,
+        opt_in_subject: str | None = None,
+        opt_in_content: str | None = None,
+    ) -> str:
+        args = {
+            "name": name,
+            "emoji": emoji,
+            "double_opt_in": double_opt_in,
+            "opt_in_from": opt_in_from,
+            "opt_in_subject": opt_in_subject,
+            "opt_in_content": opt_in_content,
+        }
+
         def body(info: CallInfo):
-            r = self.client.post("/v1/contactBooks", drop_none({"name": name, "emoji": emoji}))
+            # Always send doubleOptInEnabled: useSend turns double opt-in ON when the field is omitted.
+            payload = {
+                **drop_none({"name": name, "emoji": emoji}),
+                **self._opt_in_fields(bool(double_opt_in), opt_in_from, opt_in_subject, opt_in_content),
+            }
+            r = self.client.post("/v1/contactBooks", payload)
             info.contact_book_id = _first_id(r, "id", "contactBookId")
             return r
 
-        return self.call("create_contact_book", True, {"name": name, "emoji": emoji}, body)
+        return self.call("create_contact_book", True, args, body)
+
+    def update_contact_book(
+        self,
+        book_id: str,
+        name: str | None = None,
+        emoji: str | None = None,
+        double_opt_in: bool | None = None,
+        opt_in_from: str | None = None,
+        opt_in_subject: str | None = None,
+        opt_in_content: str | None = None,
+    ) -> str:
+        args = {
+            "id": book_id,
+            "name": name,
+            "emoji": emoji,
+            "double_opt_in": double_opt_in,
+            "opt_in_from": opt_in_from,
+            "opt_in_subject": opt_in_subject,
+            "opt_in_content": opt_in_content,
+        }
+
+        def body(info: CallInfo):
+            info.contact_book_id = book_id
+            payload = {
+                **drop_none({"name": name, "emoji": emoji}),
+                **self._opt_in_fields(double_opt_in, opt_in_from, opt_in_subject, opt_in_content),
+            }
+            if not payload:
+                raise Refused("nothing to update")
+            return self.client.patch(f"/v1/contactBooks/{seg(book_id)}", payload)
+
+        return self.call("update_contact_book", True, args, body)
 
     def add_contact(self, book_id, email, first_name, last_name, properties) -> str:
         args = {
@@ -470,6 +539,8 @@ Safety rules:
   Show the preview to the user and only confirm when they say so.
 - Campaign HTML must contain {{usesend_unsubscribe_url}}.
 - 'from' must be on an allowed sender domain.
+- Contact books are created with double opt-in off. Only enable it (create_contact_book or
+  update_contact_book with double_opt_in=true) when the user asks for confirmation emails.
 - pause_campaign is always allowed: it is the emergency stop.
 """
 
@@ -576,10 +647,47 @@ def build_mcp(tools: UseSendTools) -> MCPServer:
 
     # ─── mutating (audit fails closed) ─────────────────────────────────────────
 
-    @mcp.tool(annotations=ADDITIVE)
-    def create_contact_book(name: str, emoji: str | None = None) -> Any:
-        """Create a contact book."""
-        return tools.create_contact_book(name, emoji)
+    opt_in_doc = (
+        "When double opt-in is on, useSend emails every contact added to the book (by any route) a "
+        "confirmation link, and the contact stays pending, receiving no campaigns, until they click it. "
+        f"opt_in_from must be on an allowed sender domain ({domains}); opt_in_content must contain "
+        "useSend's confirmation-URL placeholder."
+    )
+
+    @mcp.tool(
+        annotations=ADDITIVE,
+        description=(
+            "Create a contact book. Double opt-in is OFF unless double_opt_in=true; turn it on only "
+            "when the user asks for it. " + opt_in_doc
+        ),
+    )
+    def create_contact_book(
+        name: str,
+        emoji: str | None = None,
+        double_opt_in: bool = False,
+        opt_in_from: str | None = None,
+        opt_in_subject: str | None = None,
+        opt_in_content: str | None = None,
+    ) -> Any:
+        return tools.create_contact_book(name, emoji, double_opt_in, opt_in_from, opt_in_subject, opt_in_content)
+
+    @mcp.tool(
+        annotations=ADDITIVE,
+        description=(
+            "Update a contact book: rename it, or turn double opt-in on (double_opt_in=true) or off "
+            "(false) and set its confirmation email. Omitted fields are left unchanged. " + opt_in_doc
+        ),
+    )
+    def update_contact_book(
+        id: str,
+        name: str | None = None,
+        emoji: str | None = None,
+        double_opt_in: bool | None = None,
+        opt_in_from: str | None = None,
+        opt_in_subject: str | None = None,
+        opt_in_content: str | None = None,
+    ) -> Any:
+        return tools.update_contact_book(id, name, emoji, double_opt_in, opt_in_from, opt_in_subject, opt_in_content)
 
     @mcp.tool(annotations=ADDITIVE)
     def add_contact(
