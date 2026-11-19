@@ -51,6 +51,7 @@ def test_tool_set_and_annotations(mcp):
         "get_email",
         "get_analytics",
         "create_contact_book",
+        "update_contact_book",
         "add_contact",
         "import_contacts",
         "update_contact",
@@ -277,6 +278,57 @@ def test_update_contact_unsubscribe(mcp, mock):
     assert mock.writes[0]["method"] == "PATCH"
     assert mock.writes[0]["path"] == "/api/v1/contactBooks/b1/contacts/k1"
     assert mock.writes[0]["body"] == {"subscribed": False}
+
+
+# ─── double opt-in ───────────────────────────────────────────────────────────
+
+
+def test_create_contact_book_sends_double_opt_in_off_by_default(mcp, mock, audit):
+    mcp.call("create_contact_book", name="Customers")
+    # useSend enables double opt-in when the field is omitted, so it is always sent.
+    assert mock.writes[0]["body"] == {"name": "Customers", "doubleOptInEnabled": False}
+    assert audit.rows[-1]["args"]["double_opt_in"] is False
+
+
+def test_create_contact_book_with_double_opt_in(mcp, mock):
+    mcp.call(
+        "create_contact_book",
+        name="Customers",
+        double_opt_in=True,
+        opt_in_from=SENDER,
+        opt_in_subject="Confirm",
+    )
+    assert mock.writes[0]["body"] == {
+        "name": "Customers",
+        "doubleOptInEnabled": True,
+        "doubleOptInFrom": SENDER,
+        "doubleOptInSubject": "Confirm",
+    }
+
+
+def test_update_contact_book_toggles_double_opt_in(mcp, mock, audit):
+    mcp.call("update_contact_book", id="b1", double_opt_in=False)
+    mcp.call("update_contact_book", id="b1", double_opt_in=True)
+    assert [(w["method"], w["path"], w["body"]) for w in mock.writes] == [
+        ("PATCH", "/api/v1/contactBooks/b1", {"doubleOptInEnabled": False}),
+        ("PATCH", "/api/v1/contactBooks/b1", {"doubleOptInEnabled": True}),
+    ]
+    assert audit.rows[-1]["contact_book_id"] == "b1"
+
+
+def test_update_contact_book_with_nothing_to_update_is_refused(mcp, mock):
+    result = mcp.call("update_contact_book", id="b1")
+    assert result["isError"]
+    assert mock.requests == []
+
+
+@pytest.mark.parametrize("tool,args", [("create_contact_book", {"name": "C"}), ("update_contact_book", {"id": "b1"})])
+def test_opt_in_sender_outside_allowed_domains_is_refused(mcp, mock, audit, tool, args):
+    result = mcp.call(tool, **args, double_opt_in=True, opt_in_from="x@evil.example.org")
+    assert result["isError"]
+    assert "not allowed" in mcp.text(result)
+    assert mock.requests == []
+    assert audit.rows[-1]["outcome"] == "refused"
 
 
 # ─── config ──────────────────────────────────────────────────────────────────

@@ -43,7 +43,7 @@ If the server is mounted under a path, use the URL with its trailing slash (e.g.
 | Kind | Tools |
 |---|---|
 | Read | `list_domains`, `list_contact_books`, `get_contact_book`, `list_contacts`, `list_campaigns`, `get_campaign` (with stats), `list_emails`, `get_email`, `get_analytics` |
-| Contacts | `create_contact_book`, `add_contact`, `import_contacts` (CSV), `update_contact` (incl. unsubscribe) |
+| Contacts | `create_contact_book`, `update_contact_book` (incl. double opt-in), `add_contact`, `import_contacts` (CSV), `update_contact` (incl. unsubscribe) |
 | Email | `send_email`, `cancel_email` |
 | Campaigns | `create_campaign`, `schedule_campaign`, `pause_campaign`, `resume_campaign` |
 
@@ -56,6 +56,12 @@ If the server is mounted under a path, use the URL with its trailing slash (e.g.
 - **Campaign HTML must contain `{{usesend_unsubscribe_url}}`.** useSend refuses to send without
   it, and so does the server, earlier.
 - **Senders are allow-listed.** `from` must be on a domain in `MCP_ALLOWED_FROM_DOMAINS`.
+- **Double opt-in is off unless you ask.** useSend turns it on for any new contact book whose
+  create request leaves it out, and then emails every added contact a confirmation link. Those
+  contacts get no campaigns until they click it. `create_contact_book` always sends
+  `doubleOptInEnabled: false` unless called with `double_opt_in=true`. Use `update_contact_book`
+  to turn it on or off for an existing book (CLI: `books create|update --double-opt-in`,
+  `--no-double-opt-in`). A custom `opt_in_from` sender must be on an allowed domain.
 - **No delete tools** in v1.
 - `pause_campaign` is always allowed. It's the emergency stop.
 

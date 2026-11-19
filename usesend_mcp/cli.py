@@ -194,14 +194,27 @@ def books_get(c, a):
     out(c.get(f"/v1/contactBooks/{seg(a.id)}"))
 
 
+def _opt_in_body(a, enabled):
+    return drop_none(
+        {
+            "doubleOptInEnabled": enabled,
+            "doubleOptInFrom": a.opt_in_from,
+            "doubleOptInSubject": a.opt_in_subject,
+            "doubleOptInContent": read_text(None, a.opt_in_content_file),
+        }
+    )
+
+
 def books_create(c, a):
-    out(c.post("/v1/contactBooks", drop_none({"name": a.name, "emoji": a.emoji})))
+    # Always send doubleOptInEnabled: useSend turns double opt-in ON when the field is omitted.
+    body = {**drop_none({"name": a.name, "emoji": a.emoji}), **_opt_in_body(a, a.double_opt_in)}
+    out(c.post("/v1/contactBooks", body))
 
 
 def books_update(c, a):
-    body = drop_none({"name": a.name, "emoji": a.emoji})
+    body = {**drop_none({"name": a.name, "emoji": a.emoji}), **_opt_in_body(a, a.double_opt_in)}
     if not body:
-        sys.exit("nothing to update (--name/--emoji)")
+        sys.exit("nothing to update (--name/--emoji/--double-opt-in/--no-double-opt-in/--opt-in-*)")
     out(c.patch(f"/v1/contactBooks/{seg(a.id)}", body))
 
 
@@ -426,13 +439,27 @@ def build_parser() -> argparse.ArgumentParser:
     g = group("books", "contact books (campaign audiences)")
     cmd(g, "list", books_list)
     cmd(g, "get", books_get).add_argument("id")
-    s = cmd(g, "create", books_create)
+
+    def opt_in(sp, default):
+        sp.add_argument(
+            "--double-opt-in",
+            action=argparse.BooleanOptionalAction,
+            default=default,
+            help="email new contacts a confirmation link; they get no campaigns until they click it",
+        )
+        sp.add_argument("--opt-in-from", help="confirmation sender, 'Name <addr@example.com>'")
+        sp.add_argument("--opt-in-subject")
+        sp.add_argument("--opt-in-content-file", help="must contain useSend's confirmation-URL placeholder")
+
+    s = cmd(g, "create", books_create, "create a book (double opt-in off unless --double-opt-in)")
     s.add_argument("--name", required=True)
     s.add_argument("--emoji")
+    opt_in(s, False)
     s = cmd(g, "update", books_update)
     s.add_argument("id")
     s.add_argument("--name")
     s.add_argument("--emoji")
+    opt_in(s, None)
     cmd(g, "delete", books_delete).add_argument("id")
 
     # contacts

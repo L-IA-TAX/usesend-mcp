@@ -86,3 +86,23 @@ def test_parse_contacts_csv_rules():
         },
         {"email": "bob@example.com"},
     ]
+
+
+def test_cli_books_create_sends_double_opt_in_off_by_default(mock, monkeypatch):
+    monkeypatch.setenv("USESEND_API_KEY", "us_testkey")
+    assert cli.main(["--url", mock.url, "books", "create", "--name", "C"]) == 0
+    assert cli.main(["--url", mock.url, "books", "create", "--name", "D", "--double-opt-in"]) == 0
+    assert [r["body"] for r in mock.requests] == [
+        {"name": "C", "doubleOptInEnabled": False},
+        {"name": "D", "doubleOptInEnabled": True},
+    ]
+
+
+def test_cli_books_update_toggles_double_opt_in(mock, monkeypatch):
+    monkeypatch.setenv("USESEND_API_KEY", "us_testkey")
+    assert cli.main(["--url", mock.url, "books", "update", "b1", "--no-double-opt-in"]) == 0
+    assert cli.main(["--url", mock.url, "books", "update", "b1", "--name", "N"]) == 0
+    assert [(r["method"], r["path"], r["body"]) for r in mock.requests] == [
+        ("PATCH", "/api/v1/contactBooks/b1", {"doubleOptInEnabled": False}),
+        ("PATCH", "/api/v1/contactBooks/b1", {"name": "N"}),
+    ]
